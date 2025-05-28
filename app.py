@@ -227,7 +227,7 @@ def generate_xhtml(excel_data):
                 </xbrli:period>
             </xbrli:context>
             <xbrli:unit id="currency">
-                <xbrli:measure>iso4217:{escaped_currency}</xbrli:measure> {/* DEBUG: Changed to iso4217:{escaped_currency} as per common practice if your currency is a standard code */}
+            <xbrli:measure>iso4217:{escaped_currency}</xbrli:measure>
             </xbrli:unit>
             <xbrli:unit id="pure">
                 <xbrli:measure>xbrli:pure</xbrli:measure>
@@ -250,11 +250,11 @@ def generate_xhtml(excel_data):
         </tr>
         <tr>
             <td>Financial Year Start Date:</td>
-            <td><ix:nonNumeric name="cbcr:DateOfStartOfFinancialYear" contextRef="duration" format="ixt:date-day-month-year">{escaped_fy_start}</ix:nonNumeric></td> {/* Consider adding ixt:date-day-month-year if needed */}
+            <td><ix:nonNumeric name="cbcr:DateOfStartOfFinancialYear" contextRef="duration" format="ixt:date-day-month-year">{escaped_fy_start}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Financial Year End Date:</td>
-            <td><ix:nonNumeric name="cbcr:DateOfEndOfFinancialYear" contextRef="duration" format="ixt:date-day-month-year">{escaped_fy_end}</ix:nonNumeric></td> {/* Consider adding ixt:date-day-month-year if needed */}
+            <td><ix:nonNumeric name="cbcr:DateOfEndOfFinancialYear" contextRef="duration" format="ixt:date-day-month-year">{escaped_fy_end}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Reporting Currency:</td>
