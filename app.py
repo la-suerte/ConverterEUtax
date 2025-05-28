@@ -315,85 +315,132 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel to XHTML Converter - EU Tax Reporting</title>
+    <title>EU CbCR Converter</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+        :root {
+            --primary-color: #007bff; /* A nice blue */
+            --primary-dark: #0056b3;
+            --text-color: #333;
+            --light-grey: #f8f9fa;
+            --medium-grey: #e9ecef;
+            --border-color: #dee2e6;
+            --shadow-color: rgba(0, 0, 0, 0.08);
+            --success-bg: #d4edda;
+            --success-text: #155724;
+            --error-bg: #f8d7da;
+            --error-text: #721c24;
         }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            background-color: var(--light-grey);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top for longer content */
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
         .container {
             background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px var(--shadow-color);
+            max-width: 900px; /* Slightly wider for better content flow */
+            width: 100%;
+            box-sizing: border-box;
         }
+
         h1 {
-            color: #2c3e50;
+            font-size: 2.5em;
+            color: var(--primary-dark);
+            text-align: center;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        h2 {
+            font-size: 1.8em;
+            color: var(--text-color);
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--medium-grey);
+            padding-bottom: 8px;
+            font-weight: 600;
+        }
+
+        h3 {
+            font-size: 1.4em;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 15px;
+            font-weight: 400;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6c757d;
+            margin-top: -10px;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .info-box, .requirements {
+            background-color: var(--light-grey);
+            border-left: 5px solid var(--primary-color);
+            padding: 20px 25px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            color: var(--text-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* Subtle shadow for depth */
+        }
+
+        .requirements {
+            border-left: 5px solid #ffc107; /* Yellow for requirements */
+            background-color: #fffde7; /* Lighter yellow background */
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary-color);
+            border-radius: 10px;
+            padding: 50px;
             text-align: center;
             margin-bottom: 30px;
-        }
-        .info-box {
-            background-color: #e8f4fd;
-            border-left: 4px solid #3498db;
-            padding: 15px;
-            margin-bottom: 25px;
-        }
-        .upload-area {
-            border: 2px dashed #3498db;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            margin-bottom: 20px;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s ease;
+            cursor: pointer; /* Indicate it's clickable */
         }
         .upload-area:hover {
-            background-color: #f8f9fa;
+            background-color: #f0f8ff; /* Lighter blue on hover */
         }
+
         .btn {
-            background-color: #3498db;
+            background-color: var(--primary-color);
             color: white;
-            padding: 12px 24px;
+            padding: 14px 28px;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
+            font-size: 1.1em;
+            font-weight: 500;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            display: inline-block; /* For centering */
         }
         .btn:hover {
-            background-color: #2980b9;
+            background-color: var(--primary-dark);
+            transform: translateY(-2px); /* Slight lift on hover */
         }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            padding: 12px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .requirements {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin-bottom: 25px;
-        }
-        .requirements h3 {
-            margin-top: 0;
-        }
-        .requirements ul {
-            margin-bottom: 0;
-        }
-        input[type="file"] {
-            display: none;
-        }
+
         .file-input-label {
             display: inline-block;
             padding: 10px 20px;
@@ -401,61 +448,104 @@ HTML_TEMPLATE = '''
             color: white;
             border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.3s;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
         }
         .file-input-label:hover {
             background-color: #5a6268;
+        }
+        input[type="file"] {
+            display: none; /* Hide default file input */
+        }
+        #file-name {
+            margin-top: 15px;
+            font-style: italic;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            font-size: 0.95em;
+        }
+        .error {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background-color: var(--success-bg);
+            color: var(--success-text);
+            border: 1px solid #c3e6cb;
+        }
+
+        .footer-info {
+            margin-top: 40px;
+            padding-top: 25px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        .footer-info ul {
+            list-style: none;
+            padding: 0;
+            margin-top: 10px;
+        }
+        .footer-info li {
+            margin-bottom: 5px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Excel to XHTML Converter</h1>
-        <p style="text-align: center; color: #6c757d;">EU Tax Reporting Compliance Tool (Regulation 2024/2952)</p>
+        <h1>EU CbCR Converter</h1>
+        <p class="subtitle">Streamlining Country-by-Country Reporting for EU Tax Compliance</p>
        
         <div class="info-box">
-            <strong>Purpose:</strong> Convert Excel-based income tax reports to XHTML format with Inline XBRL markups for EU country-by-country reporting requirements.
+            <p><strong>Purpose:</strong> This tool simplifies compliance with the new EU public Country-by-Country Reporting (CbCR) directive (Commission Implementing Regulation (EU) 2024/2952). It converts your Excel-based income tax data into the required XHTML format with Inline XBRL (iXBRL) markups.</p>
         </div>
        
         <div class="requirements">
-            <h3>Excel File Requirements:</h3>
+            <h3>Excel File Structure Requirements:</h3>
             <ul>
-                <li><strong>Sheet 1:</strong> "General Information" - Company details, financial year, currency</li>
-                <li><strong>Sheet 2:</strong> "Country-by-Country Overview" - Tax data by jurisdiction</li>
-                <li><strong>Sheet 3:</strong> "Subsidiaries and Activities" - Entity listings and business activities</li>
-                <li><strong>Sheet 4:</strong> "Omitted Information" - Disclosure of any omitted data</li>
+                <li><strong>Sheet 1: "General Information"</strong> &ndash; Details about your ultimate parent undertaking, financial year, and reporting currency.</li>
+                <li><strong>Sheet 2: "Country-by-Country Overview"</strong> &ndash; Essential tax data for each tax jurisdiction.</li>
+                <li><strong>Sheet 3: "Subsidiaries and Activities"</strong> &ndash; A comprehensive list of your subsidiaries and their primary business activities.</li>
+                <li><strong>Sheet 4: "Omitted Information"</strong> &ndash; A clear disclosure of any information that has been intentionally omitted from the report.</li>
             </ul>
-            <p><strong>Note:</strong> All sections must be present or you will receive an error message.</p>
+            <p><strong>Important:</strong> All four sections are mandatory. Missing sections will result in an error.</p>
         </div>
        
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="error">{{ message }}</div>
+                    <div class="message error">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
        
         <form method="post" enctype="multipart/form-data">
-            <div class="upload-area">
+            <div class="upload-area" onclick="document.getElementById('file').click()">
                 <h3>Upload Your Excel File</h3>
-                <p>Select an Excel file (.xlsx or .xls) containing your tax reporting data</p>
-                <label for="file" class="file-input-label">Choose File</label>
+                <p>Click here or drag & drop your .xlsx or .xls file.</p>
                 <input type="file" name="file" id="file" accept=".xlsx,.xls" required>
-                <p id="file-name" style="margin-top: 10px; font-style: italic;"></p>
-            </div>
-            <div style="text-align: center;">
-                <button type="submit" class="btn">Convert to XHTML</button>
+                <p id="file-name"></p>
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="btn">Convert to XHTML</button>
+                </div>
             </div>
         </form>
        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 14px; color: #6c757d;">
-            <p><strong>Compliance Information:</strong></p>
+        <div class="footer-info">
+            <p><strong>Regulatory Compliance Details:</strong></p>
             <ul>
-                <li>Output conforms to Commission Implementing Regulation (EU) 2024/2952</li>
-                <li>Uses Inline XBRL 1.1 specification</li>
-                <li>Applies to financial years starting on or after 1 January 2025</li>
-                <li>Required for undertakings with consolidated revenues over EUR 750 million</li>
+                <li>Output adheres to Commission Implementing Regulation (EU) 2024/2952.</li>
+                <li>Utilizes the Inline XBRL (iXBRL) 1.1 specification for digital reporting.</li>
+                <li>Applicable for financial years commencing on or after 1 January 2025.</li>
+                <li>Mandatory for multinational undertakings with consolidated revenues exceeding EUR 750 million.</li>
             </ul>
         </div>
     </div>
@@ -463,7 +553,27 @@ HTML_TEMPLATE = '''
     <script>
         document.getElementById('file').addEventListener('change', function(e) {
             const fileName = e.target.files[0]?.name;
-            document.getElementById('file-name').textContent = fileName ? `Selected: ${fileName}` : '';
+            document.getElementById('file-name').textContent = fileName ? `Selected file: ${fileName}` : '';
+        });
+
+        // Prevent default drag and drop behavior
+        const uploadArea = document.querySelector('.upload-area');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#e0efff'; // Highlight on drag over
+        });
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = 'var(--light-grey)'; // Reset on drag leave
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = 'var(--light-grey)'; // Reset on drop
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('file').files = files;
+                document.getElementById('file-name').textContent = `Selected file: ${files[0].name}`;
+            }
         });
     </script>
 </body>
