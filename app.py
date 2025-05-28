@@ -6,9 +6,10 @@ import tempfile
 import uuid
 from datetime import datetime
 import re
+from xml.sax.saxutils import escape # <-- ADDED: Import for XML escaping
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = 'your-secret-key-here' # IMPORTANT: Change this to a strong, unique secret key for production
 
 # Configuration
 UPLOAD_FOLDER = '/tmp'
@@ -19,10 +20,14 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 def allowed_file(filename):
+    """Checks if the uploaded file has an allowed extension."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def validate_required_sections(excel_data):
-    """Validate that all required sections are present in the Excel file"""
+    """
+    Validates that all required sections (sheet names) are present in the Excel file.
+    Sheet names are checked case-insensitively.
+    """
     required_sections = [
         'General Information',
         'Country-by-Country Overview',
@@ -31,17 +36,21 @@ def validate_required_sections(excel_data):
     ]
    
     missing_sections = []
+    # Ensure excel_data is a dictionary of sheet names to DataFrames
     available_sheets = list(excel_data.keys()) if isinstance(excel_data, dict) else []
    
     for section in required_sections:
-        # Check if section exists in sheet names (case insensitive)
+        # Check if any sheet name contains the required section name (case insensitive)
         if not any(section.lower() in sheet.lower() for sheet in available_sheets):
             missing_sections.append(section)
    
     return missing_sections
 
 def validate_general_info(df):
-    """Validate required fields in General Information section"""
+    """
+    Validates required fields in the 'General Information' section.
+    Checks for field names in the first row (headers) or first column (key-value pairs).
+    """
     required_fields = [
         'Ultimate Parent Name',
         'Country of Registered Office',
@@ -54,19 +63,22 @@ def validate_general_info(df):
     missing_fields = []
    
     if df.empty:
-        return required_fields
+        return required_fields # All fields are missing if DataFrame is empty
    
-    # Check if required fields exist in the dataframe
+    # Check if required fields exist either in column headers or in the first column's values
     for field in required_fields:
+        # Check in column headers (case-insensitive)
         if not any(field.lower() in str(col).lower() for col in df.columns):
-            # Also check in the first column values
+            # If not in headers, check in the first column's values (key-value pair style)
             if not any(field.lower() in str(val).lower() for val in df.iloc[:, 0].values if pd.notna(val)):
                 missing_fields.append(field)
    
     return missing_fields
 
 def validate_country_data(df):
-    """Validate required fields in Country-by-Country section"""
+    """
+    Validates required fields (column headers) in the 'Country-by-Country Overview' section.
+    """
     required_fields = [
         'Tax Jurisdiction',
         'Country Code',
@@ -83,6 +95,7 @@ def validate_country_data(df):
     if df.empty:
         return required_fields
    
+    # Check if required fields exist in column headers (case-insensitive)
     for field in required_fields:
         if not any(field.lower() in str(col).lower() for col in df.columns):
             missing_fields.append(field)
@@ -90,11 +103,13 @@ def validate_country_data(df):
     return missing_fields
 
 def extract_general_info(df):
-    """Extract general information from the dataframe"""
+    """
+    Extracts general information from the 'General Information' DataFrame.
+    Assumes data is in key-value pairs in the first two columns.
+    """
     info = {}
    
-    # Try to extract from key-value pairs in first two columns
-    if len(df.columns) >= 2:
+    if df is not None and len(df.columns) >= 2:
         for _, row in df.iterrows():
             key = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
             value = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
@@ -115,29 +130,44 @@ def extract_general_info(df):
     return info
 
 def format_date(date_str):
-    """Format date to YYYY-MM-DD"""
+    """
+    Formats a date string into 'YYYY-MM-DD'.
+    Tries multiple common date formats for parsing.
+    """
     try:
-        # Try different date formats
-        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+        # List of common date formats to try
+        date_formats = ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']
+        
+        # Handle pandas Timestamp objects if they come directly from Excel
+        if isinstance(date_str, pd.Timestamp):
+            return date_str.strftime('%Y-%m-%d')
+        
+        # Convert to string to handle various input types
+        s_date_str = str(date_str)
+
+        for fmt in date_formats:
             try:
-                date_obj = datetime.strptime(str(date_str), fmt)
+                date_obj = datetime.strptime(s_date_str, fmt)
                 return date_obj.strftime('%Y-%m-%d')
             except ValueError:
-                continue
-        return str(date_str)  # Return as-is if parsing fails
-    except:
-        return str(date_str)
+                continue # Try next format
+        return s_date_str # Return as-is if no format matches
+    except Exception:
+        return str(date_str) # Fallback in case of unexpected input
 
 def generate_xhtml(excel_data):
-    """Generate XHTML with iXBRL markup from Excel data"""
+    """
+    Generates XHTML content with iXBRL markup from the parsed Excel data.
+    All string data inserted into the XHTML is XML-escaped to prevent parsing errors.
+    """
    
-    # Extract data from different sheets
+    # Initialize DataFrames to None
     general_info_df = None
     country_data_df = None
     subsidiaries_df = None
     omitted_info_df = None
    
-    # Find the appropriate sheets
+    # Find the appropriate sheets by checking sheet names (case-insensitive)
     for sheet_name, df in excel_data.items():
         if 'general' in sheet_name.lower():
             general_info_df = df
@@ -151,9 +181,19 @@ def generate_xhtml(excel_data):
     # Extract general information
     general_info = extract_general_info(general_info_df) if general_info_df is not None else {}
    
-    # Generate unique entity ID
+    # Generate a unique entity ID
     entity_id = f"entity_{uuid.uuid4().hex[:8]}"
    
+    # Prepare general info variables with XML escaping
+    # Ensure values are strings before escaping
+    escaped_parent_name = escape(str(general_info.get('ultimate_parent', 'N/A')))
+    escaped_country_office = escape(str(general_info.get('country_office', 'N/A')))
+    # Dates are formatted to YYYY-MM-DD, which usually don't contain special XML chars, but escaping is safe.
+    escaped_fy_start = escape(str(format_date(general_info.get('fy_start', '2025-01-01'))))
+    escaped_fy_end = escape(str(format_date(general_info.get('fy_end', '2025-12-31'))))
+    escaped_currency = escape(str(general_info.get('currency', 'EUR')))
+    escaped_oecd_instructions = escape('Yes' if general_info.get('oecd_instructions', False) else 'No')
+
     xhtml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml"
@@ -164,7 +204,7 @@ def generate_xhtml(excel_data):
       xmlns:cbcr="http://xbrl.ifrs.org/taxonomy/2024-03-14/ifrs-cbcr">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <title>Country-by-Country Report - {general_info.get('ultimate_parent', 'Company')}</title>
+    <title>Country-by-Country Report - {escaped_parent_name}</title>
     <ix:header>
         <ix:references>
             <ix:relationship fromDocument="http://xbrl.ifrs.org/taxonomy/2024-03-14/ifrs-cbcr" />
@@ -175,12 +215,12 @@ def generate_xhtml(excel_data):
                     <xbrli:identifier scheme="http://www.company-registry.eu">{entity_id}</xbrli:identifier>
                 </xbrli:entity>
                 <xbrli:period>
-                    <xbrli:startDate>{format_date(general_info.get('fy_start', '2025-01-01'))}</xbrli:startDate>
-                    <xbrli:endDate>{format_date(general_info.get('fy_end', '2025-12-31'))}</xbrli:endDate>
+                    <xbrli:startDate>{escaped_fy_start}</xbrli:startDate>
+                    <xbrli:endDate>{escaped_fy_end}</xbrli:endDate>
                 </xbrli:period>
             </xbrli:context>
             <xbrli:unit id="currency">
-                <xbrli:measure>{general_info.get('currency', 'EUR')}</xbrli:measure>
+                <xbrli:measure>{escaped_currency}</xbrli:measure>
             </xbrli:unit>
             <xbrli:unit id="pure">
                 <xbrli:measure>xbrli:pure</xbrli:measure>
@@ -195,27 +235,27 @@ def generate_xhtml(excel_data):
     <table border="1">
         <tr>
             <td>Name of Ultimate Parent Undertaking:</td>
-            <td><ix:nonNumeric name="cbcr:NameOfUltimateParentOfGroupOfStandaloneCompany" contextRef="duration">{general_info.get('ultimate_parent', 'N/A')}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:NameOfUltimateParentOfGroupOfStandaloneCompany" contextRef="duration">{escaped_parent_name}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Country of Registered Office:</td>
-            <td><ix:nonNumeric name="cbcr:CountryOfRegisteredOfficeOfUltimateParentUndertaking" contextRef="duration">{general_info.get('country_office', 'N/A')}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:CountryOfRegisteredOfficeOfUltimateParentUndertaking" contextRef="duration">{escaped_country_office}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Financial Year Start Date:</td>
-            <td><ix:nonNumeric name="cbcr:DateOfStartOfFinancialYear" contextRef="duration">{format_date(general_info.get('fy_start', '2025-01-01'))}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:DateOfStartOfFinancialYear" contextRef="duration">{escaped_fy_start}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Financial Year End Date:</td>
-            <td><ix:nonNumeric name="cbcr:DateOfEndOfFinancialYear" contextRef="duration">{format_date(general_info.get('fy_end', '2025-12-31'))}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:DateOfEndOfFinancialYear" contextRef="duration">{escaped_fy_end}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>Reporting Currency:</td>
-            <td><ix:nonNumeric name="cbcr:ReportingCurrency" contextRef="duration">{general_info.get('currency', 'EUR')}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:ReportingCurrency" contextRef="duration">{escaped_currency}</ix:nonNumeric></td>
         </tr>
         <tr>
             <td>OECD Instructions Used:</td>
-            <td><ix:nonNumeric name="cbcr:ApplicationOfOptionToReportInAccordanceWithTaxationReportingInstructions" contextRef="duration">{'Yes' if general_info.get('oecd_instructions', False) else 'No'}</ix:nonNumeric></td>
+            <td><ix:nonNumeric name="cbcr:ApplicationOfOptionToReportInAccordanceWithTaxationReportingInstructions" contextRef="duration">{escaped_oecd_instructions}</ix:nonNumeric></td>
         </tr>
     </table>
    
@@ -239,16 +279,28 @@ def generate_xhtml(excel_data):
     if country_data_df is not None and not country_data_df.empty:
         for _, row in country_data_df.iterrows():
             if pd.notna(row.iloc[0]):  # Skip empty rows
+                # Escape string values for XML insertion
+                jurisdiction = escape(str(row.iloc[0])) if pd.notna(row.iloc[0]) else 'N/A'
+                country_code = escape(str(row.iloc[1])) if pd.notna(row.iloc[1]) else 'N/A'
+                
+                # Numeric values don't need XML escaping, but ensure robust conversion
+                revenues = int(float(row.iloc[2])) if pd.notna(row.iloc[2]) and str(row.iloc[2]).replace('.','').replace('-','').isdigit() else 0
+                profit_loss = int(float(row.iloc[3])) if pd.notna(row.iloc[3]) and str(row.iloc[3]).replace('.','').replace('-','').isdigit() else 0
+                tax_paid = int(float(row.iloc[4])) if pd.notna(row.iloc[4]) and str(row.iloc[4]).replace('.','').replace('-','').isdigit() else 0
+                tax_accrued = int(float(row.iloc[5])) if pd.notna(row.iloc[5]) and str(row.iloc[5]).replace('.','').replace('-','').isdigit() else 0
+                accum_earnings = int(float(row.iloc[6])) if pd.notna(row.iloc[6]) and str(row.iloc[6]).replace('.','').replace('-','').isdigit() else 0
+                num_employees = int(float(row.iloc[7])) if pd.notna(row.iloc[7]) and str(row.iloc[7]).replace('.','').isdigit() else 0
+
                 xhtml_content += f'''
             <tr>
-                <td><ix:nonNumeric name="cbcr:TaxJurisdiction" contextRef="duration">{row.iloc[0] if pd.notna(row.iloc[0]) else 'N/A'}</ix:nonNumeric></td>
-                <td><ix:nonNumeric name="cbcr:CountryCodeOfMemberStateOrTaxJurisdiction" contextRef="duration">{row.iloc[1] if pd.notna(row.iloc[1]) else 'N/A'}</ix:nonNumeric></td>
-                <td><ix:nonFraction name="cbcr:Revenues" contextRef="duration" unitRef="currency" decimals="0">{int(float(row.iloc[2])) if pd.notna(row.iloc[2]) and str(row.iloc[2]).replace('.','').replace('-','').isdigit() else 0}</ix:nonFraction></td>
-                <td><ix:nonFraction name="cbcr:ProfitLossBeforeTax" contextRef="duration" unitRef="currency" decimals="0">{int(float(row.iloc[3])) if pd.notna(row.iloc[3]) and str(row.iloc[3]).replace('.','').replace('-','').isdigit() else 0}</ix:nonFraction></td>
-                <td><ix:nonFraction name="cbcr:IncomeTaxPaidOnCashBasis" contextRef="duration" unitRef="currency" decimals="0">{int(float(row.iloc[4])) if pd.notna(row.iloc[4]) and str(row.iloc[4]).replace('.','').replace('-','').isdigit() else 0}</ix:nonFraction></td>
-                <td><ix:nonFraction name="cbcr:IncomeTaxAccrued" contextRef="duration" unitRef="currency" decimals="0">{int(float(row.iloc[5])) if pd.notna(row.iloc[5]) and str(row.iloc[5]).replace('.','').replace('-','').isdigit() else 0}</ix:nonFraction></td>
-                <td><ix:nonFraction name="cbcr:AccumulatedEarnings" contextRef="duration" unitRef="currency" decimals="0">{int(float(row.iloc[6])) if pd.notna(row.iloc[6]) and str(row.iloc[6]).replace('.','').replace('-','').isdigit() else 0}</ix:nonFraction></td>
-                <td><ix:nonFraction name="cbcr:NumberOfEmployees" contextRef="duration" unitRef="pure" decimals="0">{int(float(row.iloc[7])) if pd.notna(row.iloc[7]) and str(row.iloc[7]).replace('.','').isdigit() else 0}</ix:nonFraction></td>
+                <td><ix:nonNumeric name="cbcr:TaxJurisdiction" contextRef="duration">{jurisdiction}</ix:nonNumeric></td>
+                <td><ix:nonNumeric name="cbcr:CountryCodeOfMemberStateOrTaxJurisdiction" contextRef="duration">{country_code}</ix:nonNumeric></td>
+                <td><ix:nonFraction name="cbcr:Revenues" contextRef="duration" unitRef="currency" decimals="0">{revenues}</ix:nonFraction></td>
+                <td><ix:nonFraction name="cbcr:ProfitLossBeforeTax" contextRef="duration" unitRef="currency" decimals="0">{profit_loss}</ix:nonFraction></td>
+                <td><ix:nonFraction name="cbcr:IncomeTaxPaidOnCashBasis" contextRef="duration" unitRef="currency" decimals="0">{tax_paid}</ix:nonFraction></td>
+                <td><ix:nonFraction name="cbcr:IncomeTaxAccrued" contextRef="duration" unitRef="currency" decimals="0">{tax_accrued}</ix:nonFraction></td>
+                <td><ix:nonFraction name="cbcr:AccumulatedEarnings" contextRef="duration" unitRef="currency" decimals="0">{accum_earnings}</ix:nonFraction></td>
+                <td><ix:nonFraction name="cbcr:NumberOfEmployees" contextRef="duration" unitRef="pure" decimals="0">{num_employees}</ix:nonFraction></td>
             </tr>'''
    
     xhtml_content += '''
@@ -271,12 +323,18 @@ def generate_xhtml(excel_data):
     if subsidiaries_df is not None and not subsidiaries_df.empty:
         for _, row in subsidiaries_df.iterrows():
             if pd.notna(row.iloc[0]):
+                # Escape all string values for XML insertion
+                sub_jurisdiction = escape(str(row.iloc[0])) if pd.notna(row.iloc[0]) else 'N/A'
+                sub_country_code = escape(str(row.iloc[1])) if pd.notna(row.iloc[1]) else 'N/A'
+                subsidiary_name = escape(str(row.iloc[2])) if pd.notna(row.iloc[2]) else 'N/A'
+                nature_of_activities = escape(str(row.iloc[3])) if pd.notna(row.iloc[3]) else 'N/A'
+
                 xhtml_content += f'''
             <tr>
-                <td><ix:nonNumeric name="cbcr:TaxJurisdiction" contextRef="duration">{row.iloc[0] if pd.notna(row.iloc[0]) else 'N/A'}</ix:nonNumeric></td>
-                <td><ix:nonNumeric name="cbcr:CountryCodeOfMemberStateOrTaxJurisdiction" contextRef="duration">{row.iloc[1] if pd.notna(row.iloc[1]) else 'N/A'}</ix:nonNumeric></td>
-                <td><ix:nonNumeric name="cbcr:DisclosureOfNamesOfSubsidiaryUndertakingsConsolidatedInFinancialStatementsOfUltimateParentUndertakingExplanatory" contextRef="duration">{row.iloc[2] if pd.notna(row.iloc[2]) else 'N/A'}</ix:nonNumeric></td>
-                <td><ix:nonNumeric name="cbcr:DescriptionOfNatureOfActivitiesOfSubsidiaryUndertakingsInMemberStateOrTaxJurisdictionExplanatory" contextRef="duration">{row.iloc[3] if pd.notna(row.iloc[3]) else 'N/A'}</ix:nonNumeric></td>
+                <td><ix:nonNumeric name="cbcr:TaxJurisdiction" contextRef="duration">{sub_jurisdiction}</ix:nonNumeric></td>
+                <td><ix:nonNumeric name="cbcr:CountryCodeOfMemberStateOrTaxJurisdiction" contextRef="duration">{sub_country_code}</ix:nonNumeric></td>
+                <td><ix:nonNumeric name="cbcr:DisclosureOfNamesOfSubsidiaryUndertakingsConsolidatedInFinancialStatementsOfUltimateParentUndertakingExplanatory" contextRef="duration">{subsidiary_name}</ix:nonNumeric></td>
+                <td><ix:nonNumeric name="cbcr:DescriptionOfNatureOfActivitiesOfSubsidiaryUndertakingsInMemberStateOrTaxJurisdictionExplanatory" contextRef="duration">{nature_of_activities}</ix:nonNumeric></td>
             </tr>'''
    
     xhtml_content += '''
@@ -289,7 +347,8 @@ def generate_xhtml(excel_data):
         <ix:nonNumeric name="cbcr:DisclosureOfTypeOfInformationOmittedExplanatory" contextRef="duration">'''
    
     if omitted_info_df is not None and not omitted_info_df.empty:
-        omitted_text = str(omitted_info_df.iloc[0, 0]) if pd.notna(omitted_info_df.iloc[0, 0]) else "No information omitted"
+        # Escape the omitted text for XML insertion
+        omitted_text = escape(str(omitted_info_df.iloc[0, 0])) if pd.notna(omitted_info_df.iloc[0, 0]) else "No information omitted"
     else:
         omitted_text = "No information omitted"
    
@@ -298,6 +357,7 @@ def generate_xhtml(excel_data):
    
     <h2>Section 5: Explanations for Material Discrepancies</h2>
     <div>
+        {/* This is static text, so no dynamic escaping needed here unless it were to come from user input */}
         <ix:nonNumeric name="cbcr:ExplanationOfAnyMaterialDiscrepanciesBetweenIncomeTaxPaidAndAccruedExplanatory" contextRef="duration">No material discrepancies identified</ix:nonNumeric>
     </div>
    
@@ -308,7 +368,7 @@ def generate_xhtml(excel_data):
    
     return xhtml_content
 
-# HTML template for the upload form
+# HTML template for the upload form (remains the same as your B12-like design)
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -582,31 +642,37 @@ HTML_TEMPLATE = '''
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
+    """
+    Handles file uploads, processes Excel data, validates it, and generates XHTML.
+    """
     if request.method == 'POST':
+        # Check if a file was part of the request
         if 'file' not in request.files:
             flash('No file selected')
             return redirect(request.url)
        
         file = request.files['file']
+        # If the user submits an empty form (no file selected)
         if file.filename == '':
             flash('No file selected')
             return redirect(request.url)
        
+        # Process the file if it exists and has an allowed extension
         if file and allowed_file(file.filename):
             try:
-                # Read Excel file
+                # Read the Excel file into a dictionary of DataFrames (one per sheet)
                 excel_data = pd.read_excel(file, sheet_name=None)
                
-                # Validate required sections
+                # Validate that all required sheets are present
                 missing_sections = validate_required_sections(excel_data)
                 if missing_sections:
                     flash(f'Missing required sections: {", ".join(missing_sections)}. Please ensure your Excel file contains sheets for: General Information, Country-by-Country Overview, Subsidiaries and Activities, and Omitted Information.')
                     return redirect(request.url)
                
-                # Additional validation for required fields
+                # Initialize a list to collect validation errors
                 errors = []
                
-                # Validate General Information
+                # Validate General Information sheet
                 general_sheet = None
                 for sheet_name, df in excel_data.items():
                     if 'general' in sheet_name.lower():
@@ -618,7 +684,7 @@ def upload_file():
                     if missing_general:
                         errors.append(f'Missing fields in General Information: {", ".join(missing_general)}')
                
-                # Validate Country-by-Country data
+                # Validate Country-by-Country data sheet
                 country_sheet = None
                 for sheet_name, df in excel_data.items():
                     if 'country' in sheet_name.lower() or 'overview' in sheet_name.lower():
@@ -630,20 +696,21 @@ def upload_file():
                     if missing_country:
                         errors.append(f'Missing fields in Country-by-Country Overview: {", ".join(missing_country)}')
                
+                # If any validation errors were found, flash them and redirect
                 if errors:
                     for error in errors:
                         flash(error)
                     return redirect(request.url)
                
-                # Generate XHTML
+                # If validation passes, generate the XHTML content
                 xhtml_content = generate_xhtml(excel_data)
                
-                # Create temporary file for download
+                # Create a temporary file to store the generated XHTML
                 temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.xhtml', delete=False, encoding='utf-8')
                 temp_file.write(xhtml_content)
-                temp_file.close()
-               
-                # Send file for download
+                temp_file.close() # Close the file to ensure all content is written
+
+                # Send the generated XHTML file for download
                 return send_file(
                     temp_file.name,
                     as_attachment=True,
@@ -652,17 +719,17 @@ def upload_file():
                 )
                
             except Exception as e:
+                # Catch any unexpected errors during file processing
                 flash(f'Error processing file: {str(e)}')
                 return redirect(request.url)
         else:
+            # If file type is not allowed
             flash('Invalid file type. Please upload an Excel file (.xlsx or .xls)')
             return redirect(request.url)
    
+    # For GET requests, render the upload form
     return render_template_string(HTML_TEMPLATE)
 
-# Remove the following lines:
-# def handler(request):
-#     return app(request.environ, lambda *args: None)
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
+# Removed the Vercel serverless function handler and the __main__ block.
+# Vercel's @vercel/python builder automatically handles the Flask app instance
+# named 'app' at the top level of this file.
