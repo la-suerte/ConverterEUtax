@@ -191,7 +191,6 @@ def generate_xhtml(excel_data):
 <body>
     <h1>Country-by-Country Report</h1>
    
-    <!-- Section 1: General Information -->
     <h2>Section 1: General Information</h2>
     <table border="1">
         <tr>
@@ -220,7 +219,6 @@ def generate_xhtml(excel_data):
         </tr>
     </table>
    
-    <!-- Section 2: Country-by-Country Overview -->
     <h2>Section 2: Overview of Information on a Country-by-Country Basis</h2>
     <table border="1">
         <thead>
@@ -257,7 +255,6 @@ def generate_xhtml(excel_data):
         </tbody>
     </table>
    
-    <!-- Section 3: List of Subsidiaries and Activities -->
     <h2>Section 3: List of Subsidiaries and Activities</h2>
     <table border="1">
         <thead>
@@ -286,7 +283,6 @@ def generate_xhtml(excel_data):
         </tbody>
     </table>
    
-    <!-- Section 4: Omitted Information -->
     <h2>Section 4: Omitted Information</h2>
     <div>
         <p><strong>Information Omitted:</strong></p>
@@ -300,7 +296,6 @@ def generate_xhtml(excel_data):
     xhtml_content += f'''{omitted_text}</ix:nonNumeric>
     </div>
    
-    <!-- Section 5: Explanations for Material Discrepancies -->
     <h2>Section 5: Explanations for Material Discrepancies</h2>
     <div>
         <ix:nonNumeric name="cbcr:ExplanationOfAnyMaterialDiscrepanciesBetweenIncomeTaxPaidAndAccruedExplanatory" contextRef="duration">No material discrepancies identified</ix:nonNumeric>
@@ -555,9 +550,9 @@ def upload_file():
    
     return render_template_string(HTML_TEMPLATE)
 
-# Vercel serverless function handler
-def handler(request):
-    return app(request.environ, lambda *args: None)
+# Remove the following lines:
+# def handler(request):
+#     return app(request.environ, lambda *args: None)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# if __name__ == '__main__':
+#     app.run(debug=True)
